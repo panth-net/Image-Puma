@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in the desktop app or the MCP server behaves incorrectly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Image Puma is released as-is — we are not actively fixing bugs, so reports
+        may not get a response. They remain valuable as documentation for other
+        users and future maintainers.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did this happen?
+      options:
+        - Desktop app
+        - MCP server (MCPB install)
+        - MCP server (npx / npm install)
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: '1.0.0'
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS and version
+      placeholder: 'macOS 15.2 (Apple Silicon)'
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the input format, the preset or settings used, and the exact paths involved if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output (MCP issues only)
+      description: Output of `image-puma mcp doctor --allow-dir /absolute/folder`.
+      render: shell

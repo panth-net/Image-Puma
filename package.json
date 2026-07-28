@@ -1,0 +1,124 @@
+{
+  "name": "image-puma",
+  "productName": "Image Puma",
+  "version": "1.0.0",
+  "description": "Local Image Puma MCP server for planning and running batch image preparation",
+  "mcpName": "io.github.panth-net/Image-Puma",
+  "homepage": "https://github.com/panth-net/Image-Puma#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/panth-net/Image-Puma.git"
+  },
+  "bugs": {
+    "url": "https://github.com/panth-net/Image-Puma/issues"
+  },
+  "main": ".webpack/main",
+  "bin": {
+    "image-puma": "./dist/cli.js",
+    "image-puma-mcp": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/cli.js"
+  },
+  "files": [
+    "dist/**/*",
+    "assets/brand/**/*",
+    "assets/icons/image-puma-48.png",
+    "docs/mcp-packaging.md",
+    "docs/support-matrix.md",
+    "mcpb/**/*",
+    "LICENSE",
+    "README.md",
+    "server.json"
+  ],
+  "engines": {
+    "node": ">=20.3.0 <26"
+  },
+  "private": false,
+  "scripts": {
+    "predev": "node scripts/kill-dev-port.js",
+    "dev": "node scripts/dev-watch.js",
+    "prestart": "node scripts/kill-dev-port.js",
+    "start": "node scripts/dev-watch.js",
+    "prestart:checked": "node scripts/kill-dev-port.js",
+    "start:checked": "WEBPACK_TYPECHECK=true node scripts/dev-watch.js",
+    "stop": "node scripts/kill-dev-port.js",
+    "prepackage": "npm run typecheck",
+    "package": "npm run background-removal:bundle && electron-forge package && npm run desktop:verify-package",
+    "premake": "npm run typecheck",
+    "make": "npm run background-removal:bundle && electron-forge make && npm run desktop:verify-package",
+    "publish:desktop": "npm run background-removal:bundle && electron-forge publish && npm run desktop:verify-package",
+    "background-removal:bundle": "node scripts/build-background-removal-runtime.js",
+    "desktop:verify-package": "node scripts/verify-desktop-package.js",
+    "prepublishOnly": "npm run build:mcp && npm run registry:validate",
+    "lint": "eslint --ext .ts,.tsx .",
+    "build:mcp": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.mcp.json",
+    "mcp:doctor": "node dist/cli.js mcp doctor",
+    "mcp:config": "node dist/cli.js mcp config",
+    "mcp:serve": "node dist-tests/src/mcp/cli.js mcp serve",
+    "mcpb:validate": "node scripts/validate-mcpb-manifest.js",
+    "mcpb:prepare": "npm run build:mcp && node scripts/prepare-mcpb.js",
+    "mcpb:pack": "node scripts/build-mcpb.js",
+    "mcpb:verify": "node scripts/verify-mcpb-artifact.js dist-mcpb/*.mcpb",
+    "package:verify": "npm run build:mcp && node scripts/verify-npm-package.js",
+    "registry:validate": "node scripts/validate-registry-metadata.js",
+    "release:sync": "node scripts/sync-release-metadata.js",
+    "typecheck": "tsc --noEmit",
+    "typecheck:core": "tsc -p tsconfig.core.json",
+    "build:test-artifacts": "rm -rf dist-tests && tsc -p tsconfig.test.json",
+    "test": "npm run test:unit",
+    "test:unit": "npm run build:test-artifacts && node --test dist-tests/tests/**/*.test.js",
+    "smoke:e2e": "npm run build:test-artifacts && node dist-tests/scripts/smoke-e2e.js"
+  },
+  "keywords": [
+    "mcp",
+    "image-compression",
+    "image-processing",
+    "sharp",
+    "local-first"
+  ],
+  "author": {
+    "name": "Pantheon Network",
+    "url": "https://www.pantheonnetwork.co/contact"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
+    "@electron-forge/plugin-fuses": "^7.11.1",
+    "@electron-forge/plugin-webpack": "^7.11.1",
+    "@electron/fuses": "^1.8.0",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "@vercel/webpack-asset-relocator-loader": "^1.10.0",
+    "css-loader": "^7.1.4",
+    "electron": "41.1.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-import": "^2.32.0",
+    "fork-ts-checker-webpack-plugin": "^9.1.0",
+    "node-loader": "^2.1.0",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "electron-store": "^11.0.2",
+    "exiftool-vendored": "^35.21.0",
+    "p-limit": "^7.3.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "sharp": "^0.34.5",
+    "zod": "^4.4.3"
+  }
+}

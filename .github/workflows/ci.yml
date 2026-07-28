@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Smoke flow
+        run: npm run smoke:e2e
+
+  mcp-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build MCP CLI
+        run: npm run build:mcp
+
+      - name: Validate registry metadata
+        run: npm run registry:validate
+
+      - name: Validate MCPB manifest
+        run: npm run mcpb:validate
+
+      - name: Doctor
+        run: node dist/cli.js mcp doctor --allow-dir "$RUNNER_TEMP"
+
+      - name: Config generator
+        run: node dist/cli.js mcp config --allow-dir "$RUNNER_TEMP"
+
+      - name: Clean npm package install
+        run: npm run package:verify

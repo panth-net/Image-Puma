@@ -1,0 +1,12 @@
+# Build-only dependencies for the self-contained desktop background remover.
+# Keep torch and torchvision on matching release lines.
+PyInstaller==6.21.0
+huggingface-hub==0.34.4
+kornia==0.8.1
+numpy==2.2.6
+pillow==11.3.0
+safetensors==0.5.3
+timm==1.0.19
+torch==2.7.1
+torchvision==0.22.1
+transformers==4.53.3

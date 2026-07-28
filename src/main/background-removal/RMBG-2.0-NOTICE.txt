@@ -1,0 +1,14 @@
+RMBG-2.0 model notice
+
+Image Puma desktop builds include the BRIA RMBG-2.0 model weights and model
+code from:
+
+https://huggingface.co/briaai/RMBG-2.0
+
+The model is developed by BRIA AI and is licensed separately from Image Puma
+under Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0):
+
+https://creativecommons.org/licenses/by-nc/4.0/
+
+Commercial use requires a separate agreement with BRIA AI. The Image Puma MIT
+license does not grant commercial rights to the bundled RMBG-2.0 model.

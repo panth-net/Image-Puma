@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a capability for the desktop app or the MCP server.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Image Puma is released as-is — new features are unlikely unless someone
+        takes over maintenance. Requests remain useful as a record of what users
+        want.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task, not the solution. What does your current workaround look like?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Image Puma to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      options:
+        - Desktop app
+        - MCP server
+        - Both
+    validations:
+      required: true

@@ -1,0 +1,105 @@
+{
+  "manifest_version": "0.3",
+  "name": "image-puma",
+  "display_name": "Image Puma",
+  "version": "1.0.0",
+  "description": "Plan and run local batch image preparation from Claude Desktop.",
+  "long_description": "Image Puma runs locally over stdio. It plans batch compression, resize, crop, naming, and metadata-cleaning work before writing files, and requires explicit confirmation before running a stored plan.",
+  "author": {
+    "name": "Pantheon Network",
+    "url": "https://www.pantheonnetwork.co/contact"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/panth-net/Image-Puma.git"
+  },
+  "homepage": "https://github.com/panth-net/Image-Puma",
+  "documentation": "https://github.com/panth-net/Image-Puma#readme",
+  "support": "https://github.com/panth-net/Image-Puma/issues",
+  "icon": "assets/icons/android-chrome-512x512.png",
+  "license": "MIT",
+  "keywords": [
+    "image",
+    "compression",
+    "metadata",
+    "local-first",
+    "mcp"
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32"
+    ],
+    "runtimes": {
+      "node": ">=20.3.0"
+    }
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/cli.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/cli.js",
+        "mcp",
+        "serve",
+        "--transport",
+        "stdio",
+        "--presets-file",
+        "${HOME}/.config/image-puma/presets.json",
+        "--allow-dir",
+        "${user_config.allowed_directories}"
+      ],
+      "env": {}
+    }
+  },
+  "user_config": {
+    "allowed_directories": {
+      "type": "directory",
+      "title": "Allowed Image Folders",
+      "description": "Folders Image Puma may read images from and write planned outputs into.",
+      "multiple": true,
+      "required": true,
+      "default": [
+        "${HOME}/Pictures",
+        "${HOME}/Downloads"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "image_puma_plan",
+      "description": "Create a read-only Image Puma batch plan for allowed local image paths."
+    },
+    {
+      "name": "image_puma_run",
+      "description": "Run a previously created Image Puma plan after explicit confirmation."
+    },
+    {
+      "name": "image_puma_list_presets",
+      "description": "List MCP-available built-in and user presets."
+    },
+    {
+      "name": "image_puma_describe_preset",
+      "description": "Return exact settings for one MCP-available preset."
+    },
+    {
+      "name": "image_puma_settings_schema",
+      "description": "Return the JSON Schema for custom Image Puma settings accepted by image_puma_plan."
+    },
+    {
+      "name": "image_puma_generate_favicon",
+      "description": "Generate browser favicon assets plus ICO, ICNS, and PNG app icons from one local image."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "image-puma",
+      "description": "Plan and run a local batch image job: compress, resize, convert, strip metadata, thumbnails, favicons.",
+      "arguments": [
+        "task"
+      ],
+      "text": "Use the Image Puma MCP tools for this local image task: ${arguments.task}. Create an Image Puma plan only first — call image_puma_plan. Do not run it yet. Pick a preset with image_puma_list_presets, or use custom settings. Show the returned plan, warnings, and planned output paths. Call image_puma_run only after my explicit confirmation."
+    }
+  ]
+}

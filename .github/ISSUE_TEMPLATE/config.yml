@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contact Pantheon Network
+    url: https://www.pantheonnetwork.co/contact
+    about: For anything that is not a bug report or feature request.
