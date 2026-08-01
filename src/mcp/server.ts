@@ -21,8 +21,33 @@ import {
   settingsSchemaOutputSchema,
 } from './output-schemas';
 import type { ImagePumaMcpService } from './service';
+import { ModernProtocolTransport } from './protocol-2026';
 
 const HOMEPAGE_URL = 'https://github.com/panth-net/Image-Puma';
+
+const SERVER_NAME = 'image-puma';
+const SERVER_VERSION = '1.0.0';
+
+/**
+ * Registration order, which is also the order `tools/list` returns. It is
+ * deliberately workflow-ordered rather than alphabetical — plan before run
+ * reads better to a model — and stable across calls, which is what the
+ * 2026-07-28 deterministic-ordering guidance asks for.
+ */
+export const IMAGE_PUMA_TOOL_NAMES = [
+  'image_puma_plan',
+  'image_puma_run',
+  'image_puma_list_presets',
+  'image_puma_describe_preset',
+  'image_puma_settings_schema',
+  'image_puma_generate_favicon',
+] as const;
+
+const SERVER_INSTRUCTIONS = [
+  'Image Puma plans and runs local image compression batches.',
+  'Always call image_puma_plan before image_puma_run.',
+  'Never call image_puma_run until the user has reviewed the plan and confirmed it.',
+].join(' ');
 
 const planInputSchema = {
   inputs: z.array(z.string()).min(1),
@@ -172,19 +197,15 @@ function loadServerIcons(): Icon[] | undefined {
 export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServer {
   const server = new McpServer(
     {
-      name: 'image-puma',
+      name: SERVER_NAME,
       title: 'Image Puma',
-      version: '1.0.0',
+      version: SERVER_VERSION,
       description: 'Plans and runs local batch image preparation. Images never leave the machine.',
       websiteUrl: HOMEPAGE_URL,
       icons: loadServerIcons(),
     },
     {
-      instructions: [
-        'Image Puma plans and runs local image compression batches.',
-        'Always call image_puma_plan before image_puma_run.',
-        'Never call image_puma_run until the user has reviewed the plan and confirmed it.',
-      ].join(' '),
+      instructions: SERVER_INSTRUCTIONS,
     },
   );
 
@@ -368,6 +389,22 @@ function registerImagePumaPrompt(server: McpServer): void {
 
 export async function serveImagePumaMcpStdio(service: ImagePumaMcpService): Promise<void> {
   const server = createImagePumaMcpServer(service);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await server.connect(createModernStdioTransport());
+}
+
+/**
+ * Wraps the stdio transport in the 2026-07-28 conformance layer. The SDK still
+ * handles `initialize` for legacy clients; the wrapper adds `server/discover`,
+ * per-request protocol versioning, and the result fields the modern revision
+ * requires. `listChanged` is deliberately absent from the advertised modern
+ * capabilities: the tool and prompt lists are fixed, so the server never pushes
+ * change notifications.
+ */
+function createModernStdioTransport(): ModernProtocolTransport {
+  return new ModernProtocolTransport(new StdioServerTransport(), {
+    serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
+    capabilities: { tools: {}, prompts: {} },
+    instructions: SERVER_INSTRUCTIONS,
+    toolNames: IMAGE_PUMA_TOOL_NAMES,
+  });
 }

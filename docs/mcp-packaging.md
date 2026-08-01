@@ -1,5 +1,38 @@
 # MCP Packaging
 
+## Protocol support
+
+Image Puma is a **dual-era** MCP server over stdio. It speaks the `2026-07-28`
+revision and every legacy revision the SDK supports, newest first:
+
+```
+2026-07-28  2025-11-25  2025-06-18  2025-03-26  2024-11-05  2024-10-07
+```
+
+Legacy clients keep using the `initialize` handshake and `ping`. Modern clients
+skip the handshake entirely: every request is served statelessly, and
+`server/discover` reports the supported versions, capabilities, and cache hints.
+
+The 1.x TypeScript SDK stops at `2025-11-25`, so the modern surface lives in
+[`src/mcp/protocol-2026.ts`](../src/mcp/protocol-2026.ts) — a transport wrapper
+that answers `server/discover`, enforces per-request protocol versioning
+(`-32022` on a version mismatch), stamps `resultType`, `_meta` server identity,
+and `ttlMs`/`cacheScope` on results, and normalizes tool schemas to the JSON
+Schema 2020-12 dialect. Tool handlers are untouched by it.
+
+Two deliberate positions:
+
+- **Roots are optional.** `roots/list` is deprecated in the modern revision and
+  unavailable to stateless clients. `--allow-dir` is the primary way to grant
+  access; client roots are still read when a legacy client offers them.
+- **Tool failures stay `isError` results.** Only protocol-level faults become
+  JSON-RPC errors (`-32601` unknown method, `-32602` unknown tool or malformed
+  params). A tool that runs and fails reports through `isError` so the model can
+  self-correct, per SEP-1303.
+
+`tests/mcp-protocol-2026.test.ts` pins all of the above, including a strict
+2020-12 metaschema check over every tool's `inputSchema` and `outputSchema`.
+
 ## npm
 
 Build the MCP CLI:
