@@ -97,6 +97,7 @@ build/
 dist/
 dist-mcpb/
 dist-tests/
+dist-release/
 
 # Internal working notes and audits (not for publication)
 .audit/
