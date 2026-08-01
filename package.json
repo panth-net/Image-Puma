@@ -1,7 +1,7 @@
 {
   "name": "image-puma",
   "productName": "Image Puma",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local Image Puma MCP server for planning and running batch image preparation",
   "mcpName": "io.github.panth-net/Image-Puma",
   "homepage": "https://github.com/panth-net/Image-Puma#readme",

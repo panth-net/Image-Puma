@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "image-puma",
   "display_name": "Image Puma",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Plan and run local batch image preparation from Claude Desktop.",
   "long_description": "Image Puma runs locally over stdio. It plans batch compression, resize, crop, naming, and metadata-cleaning work before writing files, and requires explicit confirmation before running a stored plan.",
   "author": {

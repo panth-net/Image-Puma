@@ -26,7 +26,7 @@ import { ModernProtocolTransport } from './protocol-2026';
 const HOMEPAGE_URL = 'https://github.com/panth-net/Image-Puma';
 
 const SERVER_NAME = 'image-puma';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '1.1.0';
 
 /**
  * Registration order, which is also the order `tools/list` returns. It is
