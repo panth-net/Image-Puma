@@ -22,8 +22,8 @@ test('package metadata exposes the MCP npm binary shape', () => {
   assert.equal(packageJson.name, 'image-puma');
   assert.equal(packageJson.mcpName, 'io.github.panth-net/Image-Puma');
   assert.equal(packageJson.bin.mcp, undefined);
-  assert.equal(packageJson.bin['image-puma'], './dist/cli.js');
-  assert.equal(packageJson.bin['image-puma-mcp'], './dist/cli.js');
+  assert.equal(packageJson.bin['image-puma'], 'dist/cli.js');
+  assert.equal(packageJson.bin['image-puma-mcp'], 'dist/cli.js');
   assert.equal(packageJson.engines.node, '>=20.3.0 <26');
   assert.ok(packageJson.files.includes('server.json'));
   assert.ok(packageJson.files.includes('assets/brand/**/*'));

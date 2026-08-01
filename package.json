@@ -14,8 +14,8 @@
   },
   "main": ".webpack/main",
   "bin": {
-    "image-puma": "./dist/cli.js",
-    "image-puma-mcp": "./dist/cli.js"
+    "image-puma": "dist/cli.js",
+    "image-puma-mcp": "dist/cli.js"
   },
   "exports": {
     ".": "./dist/cli.js"
