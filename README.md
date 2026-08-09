@@ -40,10 +40,12 @@ The MCPB installer asks you to choose allowed image folders. Image Puma can only
 For coding sessions (optimizing project assets, generating favicons, prepping images for deploys), add the MCP server with one command:
 
 ```bash
-claude mcp add --scope user image-puma -- npx -y image-puma mcp serve --transport stdio --allow-dir ~/Pictures ~/Downloads ~/Documents
+claude mcp add --scope user image-puma -- "$(command -v npx)" -y image-puma mcp serve --transport stdio --allow-dir ~/Pictures ~/Downloads ~/Documents
 ```
 
 `--scope user` makes Image Puma available in **every** repo and terminal on your machine; leave it off and it only loads in the folder you ran the command from. Swap the folders for whatever Image Puma should be allowed to touch — add a project folder to let it optimize the images in that repo, e.g. "compress every image in `assets/` for the web".
+
+Copy that `"$(command -v npx)"` part exactly — it expands to the full path of `npx` when you run it. Registering a bare `npx` looks fine and then fails to connect, because MCP servers are launched with a minimal PATH that doesn't include Node version managers like nvm, fnm, or Volta. See [Node not found](#node-not-found) below.
 
 Then start a **new** Claude Code session (new conversation in the VS Code extension, or a fresh `claude` in the terminal) — MCP servers and their commands are discovered at session start, so already-open sessions won't see it. Check it's connected any time with `claude mcp list`.
 
@@ -51,7 +53,7 @@ If you cloned this repo instead, point the command at your local build (absolute
 
 ```bash
 npm install && npm run build:mcp
-claude mcp add --scope user image-puma -- node /absolute/path/to/Image-Puma/dist/cli.js mcp serve --transport stdio --allow-dir ~/Pictures
+claude mcp add --scope user image-puma -- "$(command -v node)" /absolute/path/to/Image-Puma/dist/cli.js mcp serve --transport stdio --allow-dir ~/Pictures
 ```
 
 ### Any other MCP client
@@ -62,7 +64,7 @@ Developer install with `npx`, using an absolute allowed folder path:
 {
   "mcpServers": {
     "image-puma": {
-      "command": "npx",
+      "command": "/usr/local/bin/npx",
       "args": [
         "-y",
         "image-puma",
@@ -78,7 +80,7 @@ Developer install with `npx`, using an absolute allowed folder path:
 }
 ```
 
-Fyi use absolute paths in `mcpServers` JSON.
+Use absolute paths everywhere in `mcpServers` JSON — for the allowed folders **and** for `command`. Run `command -v npx` in your terminal and paste whatever it prints in place of `/usr/local/bin/npx`. On native Windows, use `"command": "cmd"` with `"/c"` and `"npx"` as the first two args instead.
 
 ### What it looks like in use
 
@@ -129,6 +131,37 @@ Create a plan first with image_puma_plan — plan only, do not run it yet. Pick 
 New sessions then get `/image-puma` everywhere — terminal and VS Code — as long as the MCP server from "Add it to Claude Code" above is registered.
 
 Quick favicon generation is available through `image_puma_generate_favicon`.
+
+## Troubleshooting
+
+### Node not found
+
+`claude mcp list` shows Image Puma as failed, with `ENOENT: Executable not found in $PATH: "npx"` (or `"node"`):
+
+```
+image-puma: npx -y image-puma mcp serve ... - ✘ Failed to connect
+```
+
+Your MCP client launches servers with a minimal PATH that never sources `~/.zshrc` or `~/.bashrc`, so a Node installed through nvm, fnm, Volta, or asdf is invisible to it even though your terminal finds it fine. Fix it by re-registering with an absolute path:
+
+```bash
+claude mcp remove image-puma -s user
+claude mcp add --scope user image-puma -- "$(command -v npx)" -y image-puma mcp serve --transport stdio --allow-dir ~/Pictures
+```
+
+Then start a new session and check `claude mcp list` again.
+
+One catch if you use nvm: `command -v npx` resolves to a version-pinned path like `~/.nvm/versions/node/v24.13.1/bin/npx`, which stops existing the next time you upgrade Node. Either re-run the two commands above after an upgrade, or point Image Puma at a Node that isn't managed by nvm (`/opt/homebrew/bin/node` or `/usr/local/bin/node`) so the path stays valid. Image Puma needs Node 20.3.0 or newer.
+
+Claude Desktop users can skip all of this — the `.mcpb` bundle above ships with its own Node runtime.
+
+### Anything else
+
+Run the built-in check, which reports Node version, Sharp, ExifTool, and whether your allowed folders are actually writable:
+
+```bash
+npx -y image-puma mcp doctor --allow-dir ~/Pictures
+```
 
 ## Contribute
 
