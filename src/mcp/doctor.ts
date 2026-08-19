@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { spawn } from 'child_process';
 import { createRequire } from 'module';
 import * as os from 'os';
 import * as path from 'path';
@@ -9,6 +10,32 @@ import { createImagePumaMcpService } from './service';
 import { resolveAllowedRoots } from './path-policy';
 
 const nodeRequire = createRequire(__filename);
+const cleanupOptions = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 } as const;
+const windowsCleanupScript = [
+  "const fs = require('fs/promises');",
+  'const target = process.argv[1];',
+  `fs.rm(target, ${JSON.stringify(cleanupOptions)}).catch(() => undefined);`,
+].join('');
+
+function cleanupBestEffort(target: string): void {
+  if (process.platform === 'win32') {
+    try {
+      const cleanupProcess = spawn(process.execPath, ['-e', windowsCleanupScript, target], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      cleanupProcess.unref();
+    } catch {
+      // Best-effort: failure to start cleanup shouldn't block the doctor report.
+    }
+    return;
+  }
+
+  fs.rm(target, cleanupOptions).catch(() => {
+    // Best-effort: cleanup failure shouldn't block the doctor report.
+  });
+}
 
 export type DoctorCheckStatus = 'pass' | 'fail';
 
@@ -152,7 +179,7 @@ async function checkWriteProbe(allowedDirs: string[] = []): Promise<DoctorCheck>
       const probeDir = path.join(root.realPath, `.image-puma-doctor-${process.pid}-${Date.now()}`);
       await fs.mkdir(probeDir, { recursive: false });
       await fs.writeFile(path.join(probeDir, 'probe.txt'), 'ok');
-      await fs.rm(probeDir, { recursive: true, force: true });
+      cleanupBestEffort(probeDir);
     }
 
     return {
@@ -267,7 +294,7 @@ async function checkRuntimePlanRunNoNetwork(): Promise<DoctorCheck> {
       message: `Runtime plan/run probe failed: ${errorMessage(error)}`,
     };
   } finally {
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    cleanupBestEffort(tmpRoot);
   }
 }
 
