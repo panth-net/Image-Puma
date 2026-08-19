@@ -155,6 +155,12 @@ One catch if you use nvm: `command -v npx` resolves to a version-pinned path lik
 
 Claude Desktop users can skip all of this — the `.mcpb` bundle above ships with its own Node runtime.
 
+### Windows resolves `npx image-puma` to a local checkout
+
+On Windows, running `npx image-puma ...` from inside a directory named `image-puma` (case-insensitively), such as a clone of this repository, can make npm resolve the package name to that local directory instead of the published package. If the checkout has not been built, the command fails with `'image-puma' is not recognized as an internal or external command`.
+
+Run the `npx image-puma ...` command from a different working directory. When developing from a clone, build it with `npm run build:mcp` and point the MCP server directly at the local `dist/cli.js` instead of invoking it through `npx`.
+
 ### Anything else
 
 Run the built-in check, which reports Node version, Sharp, ExifTool, and whether your allowed folders are actually writable:
