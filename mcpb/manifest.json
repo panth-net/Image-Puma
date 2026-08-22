@@ -62,14 +62,16 @@
       "required": true,
       "default": [
         "${HOME}/Pictures",
-        "${HOME}/Downloads"
+        "${HOME}/Downloads",
+        "${HOME}/Documents",
+        "${HOME}/Desktop"
       ]
     }
   },
   "tools": [
     {
       "name": "image_puma_plan",
-      "description": "Create a read-only Image Puma batch plan for allowed local image paths."
+      "description": "Plan a local Image Puma batch. For Magick-style jobs pass quality, format, and lossless — skip list_presets and settings_schema. Supports Windows paths and file:// URLs."
     },
     {
       "name": "image_puma_run",
@@ -77,15 +79,15 @@
     },
     {
       "name": "image_puma_list_presets",
-      "description": "List MCP-available built-in and user presets."
+      "description": "List named pipelines such as web-upload or thumbnail. Skip for Magick-style quality jobs."
     },
     {
       "name": "image_puma_describe_preset",
-      "description": "Return exact settings for one MCP-available preset."
+      "description": "Return exact settings for one named preset. Skip unless the user asked for that preset."
     },
     {
       "name": "image_puma_settings_schema",
-      "description": "Return the JSON Schema for custom Image Puma settings accepted by image_puma_plan."
+      "description": "JSON Schema for nested customSettings. Skip unless you need crop, resize, or naming beyond quality/format/lossless."
     },
     {
       "name": "image_puma_generate_favicon",
@@ -99,7 +101,7 @@
       "arguments": [
         "task"
       ],
-      "text": "Use the Image Puma MCP tools for this local image task: ${arguments.task}. Create an Image Puma plan only first — call image_puma_plan. Do not run it yet. Pick a preset with image_puma_list_presets, or use custom settings. Show the returned plan, warnings, and planned output paths. Call image_puma_run only after my explicit confirmation."
+      "text": "Use the Image Puma MCP tools for this local image task: ${arguments.task}. Create an Image Puma plan only first — call image_puma_plan. Do not run it yet. For Magick-style jobs pass quality, optional format, and optional lossless on image_puma_plan; do not call list_presets or settings_schema first. Call list_presets only for a named pipeline like web-upload. Show the returned plan, warnings, and planned output paths. Call image_puma_run only after my explicit confirmation."
     }
   ]
 }

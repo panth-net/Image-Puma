@@ -125,5 +125,5 @@ test('MCP config command writes JSON through the provided stdout', async () => {
 
   const parsed = JSON.parse(output) as { mcpServers: { 'image-puma': { args: string[] } } };
   assert.equal(parsed.mcpServers['image-puma'].args[1], 'image-puma@9.9.9');
-  assert.ok(parsed.mcpServers['image-puma'].args.includes('/tmp/images'));
+  assert.ok(parsed.mcpServers['image-puma'].args.includes(path.resolve('/tmp/images')));
 });

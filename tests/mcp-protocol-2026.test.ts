@@ -372,9 +372,9 @@ test('notifications are accepted and never answered', async () => {
 });
 
 test('the server never initiates requests to the client', async () => {
-  // Server-initiated requests are replaced by MRTR in the modern revision. This
-  // server only reads client roots, which it skips when no `roots` capability
-  // was declared — the permanent state for a modern stateless client.
+  // Server-initiated requests are replaced by MRTR in the modern revision.
+  // Image Puma never calls roots/list: Cursor on Windows answers with
+  // drive-letter URIs that fail the MCP file:// schema and abort the tool.
   await withServer(async (server) => {
     await server.call({
       jsonrpc: '2.0',

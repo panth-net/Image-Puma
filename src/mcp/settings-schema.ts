@@ -3,7 +3,37 @@ import { normalizeBackgroundRemovalSettings } from '../core/shared/background-re
 import { normalizeMetadataSettings } from '../core/shared/metadata-settings';
 import { ImagePumaMcpError } from './types';
 
-const OUTPUT_FORMATS: OutputFormat[] = ['jpeg', 'png', 'webp', 'avif', 'tiff', 'ico', 'icns', 'keep-original'];
+export const OUTPUT_FORMATS: OutputFormat[] = ['jpeg', 'png', 'webp', 'avif', 'tiff', 'ico', 'icns', 'keep-original'];
+
+export function pngCompressionFromQuality(quality: number): number {
+  return Math.max(0, Math.min(9, Math.round((100 - quality) / 11.111)));
+}
+
+export function applyQualityJob(
+  preset: AppPreset,
+  job: { quality?: number; format?: OutputFormat; lossless?: boolean },
+): AppPreset {
+  if (job.format !== undefined) {
+    preset.output.format = job.format;
+  }
+  if (job.quality !== undefined) {
+    preset.output.jpegQuality = job.quality;
+    preset.output.webpQuality = job.quality;
+    preset.output.avifQuality = job.quality;
+    preset.output.pngCompressionLevel = pngCompressionFromQuality(job.quality);
+    if (job.format === undefined && preset.output.format === 'keep-original') {
+      preset.output.format = 'webp';
+    }
+  }
+  if (job.lossless !== undefined) {
+    preset.output.lossless = job.lossless;
+    if (job.lossless && job.format === undefined && preset.output.format === 'keep-original') {
+      preset.output.format = 'webp';
+    }
+  }
+  return preset;
+}
+
 const RESIZE_MODES: ResizeMode[] = ['none', 'width', 'height', 'fit-box', 'exact', 'percent'];
 const METADATA_MODES: MetadataMode[] = [
   'strip-all',

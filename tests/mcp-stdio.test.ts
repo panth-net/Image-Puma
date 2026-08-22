@@ -4,7 +4,6 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import { pathToFileURL } from 'url';
 import sharp from 'sharp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -21,6 +20,12 @@ async function writeInputImage(tmpRoot: string, name = 'stdio-source.jpg'): Prom
     },
   }).jpeg().toFile(inputPath);
   return inputPath;
+}
+
+async function removeTempDir(dir: string): Promise<void> {
+  // Windows Sharp handles keep files locked; awaited fs.rm retries EBUSY and can hang the test process.
+  if (process.platform === 'win32') return;
+  await fs.rm(dir, { recursive: true, force: true });
 }
 
 function structured<T>(result: unknown): T {
@@ -112,6 +117,7 @@ test('MCP stdio server exposes all tools and runs plan to completion', async () 
     assert.match(text, /image_puma_plan/);
     assert.match(text, /Do not run it/);
     assert.match(text, /explicitly confirm/);
+    assert.match(text, /quality/);
     assert.ok(text.includes(inputPath));
 
     const planProgress: unknown[] = [];
@@ -163,11 +169,11 @@ test('MCP stdio server exposes all tools and runs plan to completion', async () 
     await fs.access(run.result.results[0].outputPath);
   } finally {
     await client.close().catch((): undefined => undefined);
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempDir(tmpRoot);
   }
 });
 
-test('MCP stdio server accepts MCP client roots without --allow-dir', async () => {
+test('MCP stdio server never asks the client for roots/list', async () => {
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'image-puma-mcp-roots-'));
   const outsideRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'image-puma-mcp-roots-outside-'));
   const inputPath = await writeInputImage(tmpRoot);
@@ -175,6 +181,7 @@ test('MCP stdio server accepts MCP client roots without --allow-dir', async () =
   const outputDir = path.join(tmpRoot, 'out');
   const presetsPath = path.join(tmpRoot, 'presets.json');
   await fs.mkdir(outputDir);
+  let listedRoots = false;
 
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -182,6 +189,8 @@ test('MCP stdio server accepts MCP client roots without --allow-dir', async () =
       compiledCliPath(),
       'mcp',
       'serve',
+      '--allow-dir',
+      tmpRoot,
       '--presets-file',
       presetsPath,
     ],
@@ -191,9 +200,10 @@ test('MCP stdio server accepts MCP client roots without --allow-dir', async () =
     { name: 'image-puma-roots-client', version: '1.0.0' },
     { capabilities: { roots: {} } },
   );
-  client.setRequestHandler(ListRootsRequestSchema, () => ({
-    roots: [{ uri: pathToFileURL(tmpRoot).href, name: 'test-root' }],
-  }));
+  client.setRequestHandler(ListRootsRequestSchema, () => {
+    listedRoots = true;
+    return { roots: [{ uri: tmpRoot, name: 'native-root' }] };
+  });
 
   try {
     await client.connect(transport);
@@ -206,6 +216,7 @@ test('MCP stdio server accepts MCP client roots without --allow-dir', async () =
       },
     });
     assert.equal(allowedPlanCall.isError, undefined);
+    assert.equal(listedRoots, false, 'roots/list would crash Cursor on Windows drive-letter URIs');
 
     const blockedPlanCall = await client.callTool({
       name: 'image_puma_plan',
@@ -219,8 +230,54 @@ test('MCP stdio server accepts MCP client roots without --allow-dir', async () =
     assert.equal(blocked.code, 'PATH_NOT_ALLOWED');
   } finally {
     await client.close().catch((): undefined => undefined);
-    await fs.rm(tmpRoot, { recursive: true, force: true });
-    await fs.rm(outsideRoot, { recursive: true, force: true });
+    await removeTempDir(tmpRoot);
+    await removeTempDir(outsideRoot);
+  }
+});
+
+test('MCP stdio server accepts native filesystem paths as inputs', async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'image-puma-mcp-native-paths-'));
+  const inputPath = await writeInputImage(tmpRoot, 'ChatGPT Image Aug 20.jpg');
+  const outputDir = path.join(tmpRoot, 'out');
+  const presetsPath = path.join(tmpRoot, 'presets.json');
+  await fs.mkdir(outputDir);
+
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [
+      compiledCliPath(),
+      'mcp',
+      'serve',
+      '--allow-dir',
+      tmpRoot,
+      '--presets-file',
+      presetsPath,
+    ],
+    stderr: 'pipe',
+  });
+  const client = new Client({ name: 'image-puma-native-paths-client', version: '1.0.0' });
+
+  try {
+    await client.connect(transport);
+    const planCall = await client.callTool({
+      name: 'image_puma_plan',
+      arguments: {
+        inputs: [inputPath],
+        outputDir,
+        quality: 82,
+        format: 'webp',
+      },
+    });
+    assert.equal(planCall.isError, undefined, 'native Windows/POSIX paths with spaces must be accepted');
+    const plan = structured<{
+      plannedOutputs: Array<{ outputPath: string; format: string }>;
+      job: { quality?: number; format?: string };
+    }>(planCall);
+    assert.equal(plan.job.quality, 82);
+    assert.equal(plan.job.format, 'webp');
+  } finally {
+    await client.close().catch((): undefined => undefined);
+    await removeTempDir(tmpRoot);
   }
 });
 
@@ -273,7 +330,7 @@ test('MCP stdio plan request is cancelable through the SDK signal', async () => 
     assert.equal(sawProgress, true);
   } finally {
     await client.close().catch((): undefined => undefined);
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempDir(tmpRoot);
   }
 });
 
@@ -442,7 +499,7 @@ test('MCP raw stdout carries only JSON-RPC protocol messages during plan and run
     raw.assertNoStdoutParseError();
   } finally {
     child.kill('SIGTERM');
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempDir(tmpRoot);
   }
 });
 

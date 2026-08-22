@@ -13,7 +13,7 @@ import { isBackgroundRemovalEnabled } from '../core/shared/background-removal-se
 import { runBatchCore } from '../core/processing/run-batch';
 import { generateFaviconBundle } from '../core/processing/generate-favicon-bundle';
 import type { AppPreset, BatchOutputPlanIssue, InputFile } from '../core/shared/types';
-import { applyCustomSettings, IMAGE_PUMA_SETTINGS_SCHEMA } from './settings-schema';
+import { applyCustomSettings, applyQualityJob, IMAGE_PUMA_SETTINGS_SCHEMA, OUTPUT_FORMATS } from './settings-schema';
 import { InMemoryMcpPlanStore } from './plan-store';
 import type {
   InputIdentity,
@@ -41,19 +41,22 @@ import {
   normalizeScannedFiles,
   realpathForExistingPath,
   resolveAllowedRoots,
+  resolveConfiguredAndDefaultAllowedRoots,
 } from './path-policy';
 
 export const DEFAULT_MCP_LIMITS: McpServerLimits = {
   maxFiles: 500,
   maxTotalInputBytes: 5 * 1024 * 1024 * 1024,
   maxMegapixelsPerFile: 100,
-  maxConcurrentFiles: 4,
-  hashSmallFileBytes: 10 * 1024 * 1024,
+  maxConcurrentFiles: 8,
+  hashSmallFileBytes: 256 * 1024,
   processingTimeoutSeconds: 120,
 };
 
 export interface ImagePumaMcpServiceOptions {
   allowedDirs?: string[];
+  /** Merge cwd plus Pictures/Downloads/Documents/Desktop when those folders exist. */
+  includeDefaultDirs?: boolean;
   presetRepository?: UserPresetRepository;
   presetFilePath?: string;
   planStore?: InMemoryMcpPlanStore;
@@ -176,6 +179,28 @@ function validatePlanInput(input: McpPlanInput): void {
   if (invalid !== undefined) {
     throw new ImagePumaMcpError('INVALID_ARGUMENT', 'Every input path must be a non-empty string.');
   }
+  if (input.quality !== undefined) {
+    if (typeof input.quality !== 'number' || !Number.isInteger(input.quality) || input.quality < 1 || input.quality > 100) {
+      throw new ImagePumaMcpError('INVALID_ARGUMENT', 'quality must be an integer from 1 to 100, like ImageMagick -quality.');
+    }
+  }
+  if (input.format !== undefined && !OUTPUT_FORMATS.includes(input.format)) {
+    throw new ImagePumaMcpError('INVALID_ARGUMENT', `format must be one of: ${OUTPUT_FORMATS.join(', ')}`);
+  }
+  if (input.lossless !== undefined && typeof input.lossless !== 'boolean') {
+    throw new ImagePumaMcpError('INVALID_ARGUMENT', 'lossless must be a boolean.');
+  }
+}
+
+function isQualityJob(input: McpPlanInput): boolean {
+  return input.quality !== undefined || input.format !== undefined || input.lossless === true;
+}
+
+function namingSanitizeWasSet(customSettings: unknown): boolean {
+  if (!customSettings || typeof customSettings !== 'object' || Array.isArray(customSettings)) return false;
+  const naming = (customSettings as Record<string, unknown>).naming;
+  if (!naming || typeof naming !== 'object' || Array.isArray(naming)) return false;
+  return Object.prototype.hasOwnProperty.call(naming, 'sanitizeAiTerms');
 }
 
 function validateRunInput(input: McpRunInput): void {
@@ -440,7 +465,13 @@ export class ImagePumaMcpService {
     allowedRoots: AllowedRoot[],
   ): Promise<AppPreset> {
     const allowOverwrite = Boolean(input.allowOverwrite);
-    const preset = applyCustomSettings(basePreset, input.customSettings);
+    const preset = applyQualityJob(
+      applyCustomSettings(basePreset, input.customSettings),
+      { quality: input.quality, format: input.format, lossless: input.lossless },
+    );
+    if (isQualityJob(input) && !namingSanitizeWasSet(input.customSettings)) {
+      preset.naming.sanitizeAiTerms = false;
+    }
     const requestedOverwrite = preset.export.overwrite;
 
     if (input.outputDir !== undefined) {
@@ -587,7 +618,9 @@ export class ImagePumaMcpService {
 }
 
 export async function createImagePumaMcpService(options: ImagePumaMcpServiceOptions = {}): Promise<ImagePumaMcpService> {
-  const allowedRoots = await resolveAllowedRoots(options.allowedDirs || []);
+  const allowedRoots = options.includeDefaultDirs
+    ? await resolveConfiguredAndDefaultAllowedRoots(options.allowedDirs || [])
+    : await resolveAllowedRoots(options.allowedDirs || []);
   const presetRepository = options.presetRepository
     ?? createUserPresetRepository(createJsonFilePresetStore(options.presetFilePath));
 

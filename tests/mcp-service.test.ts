@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import sharp from 'sharp';
 import type { AppPreset } from '../src/core/shared/types';
 import { defaultPresets } from '../src/core/presets/default-presets';
 import type { UserPresetRepository } from '../src/core/presets/user-presets';
 import { InMemoryMcpPlanStore } from '../src/mcp/plan-store';
 import { createImagePumaMcpService } from '../src/mcp/service';
-import { applyCustomSettings } from '../src/mcp/settings-schema';
+import { applyCustomSettings, applyQualityJob, pngCompressionFromQuality } from '../src/mcp/settings-schema';
+import { summarizePlanResult } from '../src/mcp/summaries';
 import { ImagePumaMcpError } from '../src/mcp/types';
 
 const emptyPresetRepository: UserPresetRepository = {
@@ -55,6 +57,8 @@ async function withTempRoot<T>(prefix: string, fn: (tmpRoot: string) => Promise<
   try {
     return await fn(tmpRoot);
   } finally {
+    // Windows Sharp handles keep files locked; awaited fs.rm retries EBUSY and can hang the test process.
+    if (process.platform === 'win32') return;
     await fs.rm(tmpRoot, { recursive: true, force: true });
   }
 }
@@ -105,6 +109,27 @@ test('MCP service plans and runs an authoritative stored plan', async () => {
   });
 });
 
+test('MCP plan accepts file URL inputs inside an allowed root', async () => {
+  await withTempRoot('image-puma-mcp-file-url-', async (tmpRoot) => {
+    const inputPath = await writeInputImage(tmpRoot);
+    const outputDir = path.join(tmpRoot, 'out');
+    await fs.mkdir(outputDir);
+    const service = await createImagePumaMcpService({
+      allowedDirs: [pathToFileURL(tmpRoot).href],
+      presetRepository: emptyPresetRepository,
+    });
+
+    const plan = await service.plan({
+      inputs: [pathToFileURL(inputPath).href],
+      outputDir: pathToFileURL(outputDir).href,
+      customSettings: { output: { format: 'webp' } },
+    });
+
+    assert.equal(plan.errors.length, 0);
+    assert.equal(plan.acceptedFiles.length, 1);
+  });
+});
+
 test('MCP service generates a complete favicon and app-icon bundle inside an allowed root', async () => {
   await withTempRoot('image-puma-mcp-favicon-', async (tmpRoot) => {
     const inputPath = await writeInputImage(tmpRoot, 'logo.jpg');
@@ -142,6 +167,129 @@ test('MCP custom settings reject unknown keys and clamp numeric ranges', () => {
     () => applyCustomSettings(preset, { output: { madeUp: true } }),
     (error) => error instanceof ImagePumaMcpError && error.code === 'SETTINGS_INVALID',
   );
+});
+
+test('includeDefaultDirs allows the process cwd without roots/list', async () => {
+  const service = await createImagePumaMcpService({
+    allowedDirs: [],
+    includeDefaultDirs: true,
+    presetRepository: emptyPresetRepository,
+  });
+  const cwd = await fs.realpath(process.cwd());
+  assert.ok(service.allowedRoots.some((root) => root.realPath === cwd));
+});
+
+test('MCP plan accepts native paths with spaces', async () => {
+  await withTempRoot('image-puma-mcp-spaces-', async (tmpRoot) => {
+    const inputPath = await writeInputImage(tmpRoot, 'ChatGPT Image Aug 20, 2026.jpg');
+    const outputDir = path.join(tmpRoot, 'out');
+    await fs.mkdir(outputDir);
+    const service = await createImagePumaMcpService({
+      allowedDirs: [tmpRoot],
+      presetRepository: emptyPresetRepository,
+    });
+
+    const plan = await service.plan({
+      inputs: [inputPath],
+      outputDir,
+      quality: 82,
+      format: 'webp',
+    });
+
+    assert.equal(plan.errors.length, 0);
+    assert.equal(plan.acceptedFiles.length, 1);
+    assert.equal(plan.effectiveSettings.output.webpQuality, 82);
+  });
+});
+
+test('MCP plan accepts Magick-style quality jobs without nested customSettings', async () => {
+  await withTempRoot('image-puma-mcp-quality-', async (tmpRoot) => {
+    const inputPath = await writeInputImage(tmpRoot);
+    const outputDir = path.join(tmpRoot, 'out');
+    await fs.mkdir(outputDir);
+    const service = await createImagePumaMcpService({
+      allowedDirs: [tmpRoot],
+      presetRepository: emptyPresetRepository,
+    });
+
+    const q40 = await service.plan({
+      inputs: [inputPath],
+      outputDir,
+      quality: 40,
+    });
+    const q90 = await service.plan({
+      inputs: [inputPath],
+      outputDir,
+      quality: 90,
+      format: 'jpeg',
+    });
+    const lossless = await service.plan({
+      inputs: [inputPath],
+      outputDir,
+      lossless: true,
+    });
+
+    assert.equal(q40.effectiveSettings.output.format, 'webp');
+    assert.equal(q40.effectiveSettings.output.webpQuality, 40);
+    assert.equal(q40.effectiveSettings.output.jpegQuality, 40);
+    assert.equal(q40.effectiveSettings.resize.mode, 'none');
+    assert.equal(q40.effectiveSettings.naming.sanitizeAiTerms, false);
+    assert.equal(q90.effectiveSettings.output.format, 'jpeg');
+    assert.equal(q90.effectiveSettings.output.jpegQuality, 90);
+    assert.equal(lossless.effectiveSettings.output.lossless, true);
+    assert.equal(lossless.effectiveSettings.output.format, 'webp');
+
+    const run = await service.run({ planId: q40.planId, confirmed: true, acceptWarnings: true });
+    assert.equal(run.result.successCount, 1);
+    assert.equal(path.extname(run.result.results[0].outputPath), '.webp');
+    const jpegRun = await service.run({ planId: q90.planId, confirmed: true, acceptWarnings: true });
+    assert.equal(jpegRun.result.successCount, 1);
+    assert.equal(path.extname(jpegRun.result.results[0].outputPath), '.jpeg');
+  });
+});
+
+test('applyQualityJob maps ImageMagick-style quality onto codec settings', () => {
+  const preset = clonePreset(defaultPresets[0]);
+  applyQualityJob(preset, { quality: 82 });
+  assert.equal(preset.output.format, 'webp');
+  assert.equal(preset.output.webpQuality, 82);
+  assert.equal(preset.output.jpegQuality, 82);
+  assert.equal(preset.output.avifQuality, 82);
+  assert.equal(preset.output.pngCompressionLevel, pngCompressionFromQuality(82));
+
+  applyQualityJob(preset, { quality: 100, format: 'png' });
+  assert.equal(preset.output.format, 'png');
+  assert.equal(preset.output.pngCompressionLevel, 0);
+});
+
+test('MCP plan client payload keeps job summary and drops the full preset', async () => {
+  await withTempRoot('image-puma-mcp-summary-', async (tmpRoot) => {
+    const inputPath = await writeInputImage(tmpRoot);
+    const outputDir = path.join(tmpRoot, 'out');
+    await fs.mkdir(outputDir);
+    const service = await createImagePumaMcpService({
+      allowedDirs: [tmpRoot],
+      presetRepository: emptyPresetRepository,
+    });
+
+    const plan = await service.plan({
+      inputs: [inputPath],
+      outputDir,
+      quality: 82,
+    });
+    const slim = summarizePlanResult(plan) as {
+      job: { format: string; quality?: number; resize: string };
+      limits?: unknown;
+      effectiveSettings?: unknown;
+    };
+
+    assert.equal(slim.job.format, 'webp');
+    assert.equal(slim.job.quality, 82);
+    assert.equal(slim.job.resize, 'none');
+    assert.equal(slim.limits, undefined);
+    assert.equal(slim.effectiveSettings, undefined);
+    assert.ok(JSON.stringify(slim).length < JSON.stringify(plan).length);
+  });
 });
 
 test('MCP custom settings match published schema constraints', () => {
