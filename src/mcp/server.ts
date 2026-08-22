@@ -3,7 +3,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { CallToolResult, Icon } from '@modelcontextprotocol/sdk/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import type { BatchProgressUpdate, InputScanProgress } from '../core/shared/types';
 import {
@@ -21,6 +20,7 @@ import {
   settingsSchemaOutputSchema,
 } from './output-schemas';
 import type { ImagePumaMcpService } from './service';
+import { planResultText, runResultText, summarizePlanResult, summarizeRunResult } from './summaries';
 import { ModernProtocolTransport } from './protocol-2026';
 
 const HOMEPAGE_URL = 'https://github.com/panth-net/Image-Puma';
@@ -44,16 +44,20 @@ export const IMAGE_PUMA_TOOL_NAMES = [
 ] as const;
 
 const SERVER_INSTRUCTIONS = [
-  'Image Puma plans and runs local image compression batches.',
-  'Always call image_puma_plan before image_puma_run.',
-  'Never call image_puma_run until the user has reviewed the plan and confirmed it.',
+  'Image Puma plans and runs local batch image jobs. Images never leave the machine.',
+  'Pass native filesystem paths as the user provided them, including Windows drive-letter paths and spaces. Do not convert them to file://.',
+  'For Magick-style jobs, call image_puma_plan with quality (1-100), optional format, and optional lossless. Do not call list_presets, describe_preset, or settings_schema first.',
+  'Always call image_puma_plan before image_puma_run. Never run until the user has reviewed the plan and confirmed it.',
 ].join(' ');
 
 const planInputSchema = {
-  inputs: z.array(z.string()).min(1),
-  presetId: z.string().optional(),
-  customSettings: z.record(z.string(), z.unknown()).optional(),
-  outputDir: z.string().optional(),
+  inputs: z.array(z.string()).min(1).describe('Local image files or folders. Windows paths, quoted paths, and file:// URLs are accepted.'),
+  presetId: z.string().optional().describe('Built-in or user preset. Omit to keep Magick-style quality/format jobs simple: no resize, WebP unless format is set.'),
+  quality: z.number().int().min(1).max(100).optional().describe('ImageMagick-style quality 1-100 for JPEG, WebP, and AVIF. Maps PNG compression too.'),
+  format: z.enum(['jpeg', 'png', 'webp', 'avif', 'tiff', 'ico', 'icns', 'keep-original']).optional().describe('Output format. Combined with quality like magick -quality N file.webp.'),
+  lossless: z.boolean().optional().describe('Lossless WebP/AVIF when true. Use for logos and flat graphics.'),
+  customSettings: z.record(z.string(), z.unknown()).optional().describe('Advanced nested settings. Prefer top-level quality, format, and lossless for Magick-style jobs.'),
+  outputDir: z.string().optional().describe('Directory to write into. Must be inside an allowed folder.'),
   recursive: z.boolean().optional(),
   allowOverwrite: z.boolean().optional(),
 };
@@ -150,23 +154,6 @@ async function reportPlanProgress(
   });
 }
 
-async function getClientRootDirs(server: McpServer): Promise<string[]> {
-  if (!server.server.getClientCapabilities()?.roots) return [];
-
-  const rootsResult = await server.server.listRoots();
-  return rootsResult.roots
-    .map((root) => {
-      try {
-        const url = new URL(root.uri);
-        if (url.protocol !== 'file:') return null;
-        return fileURLToPath(url);
-      } catch {
-        return null;
-      }
-    })
-    .filter((root): root is string => Boolean(root));
-}
-
 /**
  * Inlines the server icon as a data URI so icon rendering never makes a network
  * request. Returns undefined when the asset is missing rather than failing to
@@ -211,7 +198,7 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
 
   server.registerTool('image_puma_plan', {
     title: 'Plan Image Puma Batch',
-    description: 'Create a read-only Image Puma batch plan for allowed local image paths.',
+    description: 'Plan a local Image Puma batch. For Magick-style jobs pass quality, format, and lossless here — do not call list_presets or settings_schema first. Accepts Windows paths, paths with spaces, and file:// URLs.',
     inputSchema: planInputSchema,
     outputSchema: planOutputSchema,
     annotations: {
@@ -225,15 +212,14 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
     try {
       const result = await service.plan(input as McpPlanInput, {
         signal: extra.signal,
-        allowedDirs: await getClientRootDirs(server),
         onScanProgress: (progress) => {
           pendingProgress.push(reportPlanProgress(progress, extra).catch((): undefined => undefined));
         },
       });
       await Promise.all(pendingProgress);
       return toolResult(
-        result as unknown as Record<string, unknown>,
-        `Plan ${result.planId}: ${result.acceptedFiles.length} accepted, ${result.plannedOutputs.length} outputs, ${result.warnings.length} warnings, ${result.errors.length} errors.`,
+        summarizePlanResult(result),
+        planResultText(result),
       );
     } catch (error) {
       await Promise.all(pendingProgress);
@@ -259,8 +245,8 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
         onProgress: (progress) => reportProgress(progress, extra).catch((): undefined => undefined),
       });
       return toolResult(
-        result as unknown as Record<string, unknown>,
-        `Run ${result.planId}: ${result.result.successCount} succeeded, ${result.result.failureCount} failed, ${result.result.skippedCount} skipped.`,
+        summarizeRunResult(result),
+        runResultText(result),
       );
     } catch (error) {
       return toolError(error);
@@ -269,7 +255,7 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
 
   server.registerTool('image_puma_list_presets', {
     title: 'List Image Puma Presets',
-    description: 'List MCP-available built-in and user presets.',
+    description: 'List named pipelines such as web-upload or thumbnail. Skip for Magick-style quality/format/lossless jobs.',
     outputSchema: listPresetsOutputSchema,
     annotations: {
       readOnlyHint: true,
@@ -291,7 +277,7 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
 
   server.registerTool('image_puma_describe_preset', {
     title: 'Describe Image Puma Preset',
-    description: 'Return exact settings for one MCP-available preset.',
+    description: 'Return exact settings for one named preset. Skip unless the user asked for that preset.',
     inputSchema: describePresetInputSchema,
     outputSchema: describePresetOutputSchema,
     annotations: {
@@ -314,7 +300,7 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
 
   server.registerTool('image_puma_settings_schema', {
     title: 'Image Puma Settings Schema',
-    description: 'Return the JSON Schema for custom Image Puma settings accepted by image_puma_plan.',
+    description: 'JSON Schema for nested customSettings. Skip unless you need crop, resize, or naming beyond quality/format/lossless.',
     outputSchema: settingsSchemaOutputSchema,
     annotations: {
       readOnlyHint: true,
@@ -347,9 +333,7 @@ export function createImagePumaMcpServer(service: ImagePumaMcpService): McpServe
     },
   }, async (input) => {
     try {
-      const result = await service.generateFavicon(input as McpFaviconInput, {
-        allowedDirs: await getClientRootDirs(server),
-      });
+      const result = await service.generateFavicon(input as McpFaviconInput);
       return toolResult(
         result as unknown as Record<string, unknown>,
         `Generated ${result.files.length} favicon and app-icon files in ${result.outputDirectory}.`,
@@ -379,8 +363,8 @@ function registerImagePumaPrompt(server: McpServer): void {
           'Use the Image Puma MCP tools for this local image task.',
           args.task ? `Task: ${args.task}` : 'Ask me which images to process and what result I want.',
           'Create an Image Puma plan only first — call image_puma_plan. Do not run it yet.',
-          'Pick a preset with image_puma_list_presets, or use custom settings (schema via image_puma_settings_schema).',
-          'Show the returned plan, warnings, and planned output paths. Call image_puma_run only after I explicitly confirm.',
+          'For Magick-style jobs, pass quality, optional format, and optional lossless on image_puma_plan. Do not call list_presets or settings_schema first.',
+          'Call list_presets only for a named pipeline like web-upload. Show the plan, warnings, and output paths. Call image_puma_run only after I explicitly confirm.',
         ].join(' '),
       },
     }],

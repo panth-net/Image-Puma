@@ -199,12 +199,14 @@ export function buildPipeline(
       pipeline = pipeline.webp({
         quality: o.webpQuality,
         lossless: o.lossless,
+        effort: 2,
       });
       break;
     case 'avif':
       pipeline = pipeline.avif({
         quality: o.avifQuality,
         lossless: o.lossless,
+        effort: 2,
       });
       break;
     case 'tiff':

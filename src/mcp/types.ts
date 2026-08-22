@@ -6,6 +6,7 @@ import type {
   BatchProgressUpdate,
   InputFile,
   InputScanProgress,
+  OutputFormat,
   SkippedInput,
   FaviconBundleResult,
 } from '../core/shared/types';
@@ -54,6 +55,10 @@ export interface McpPlanInput {
   outputDir?: string;
   recursive?: boolean;
   allowOverwrite?: boolean;
+  /** ImageMagick-style 1–100 quality applied to JPEG, WebP, and AVIF. */
+  quality?: number;
+  format?: OutputFormat;
+  lossless?: boolean;
 }
 
 export interface McpRunInput {

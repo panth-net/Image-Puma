@@ -106,14 +106,19 @@ export function expandPathVariables(value: string): string {
     '${DOWNLOADS}': path.join(home, 'Downloads'),
   };
   let expanded = value;
+  let replaced = false;
   for (const [token, replacement] of Object.entries(replacements)) {
+    if (!expanded.includes(token)) continue;
     expanded = expanded.split(token).join(replacement);
+    replaced = true;
   }
   if (expanded === '~') return home;
   if (expanded.startsWith('~/') || expanded.startsWith('~\\')) {
     return path.join(home, expanded.slice(2));
   }
-  return expanded;
+  // MCPB defaults like `${HOME}/Pictures` keep a POSIX slash after the home
+  // path; normalize so Windows allowed roots are real drive-letter paths.
+  return replaced ? path.normalize(expanded) : expanded;
 }
 
 function parsePositiveInteger(value: string, option: string): number {
@@ -321,6 +326,7 @@ export async function runCli(
 
   const service = await createImagePumaMcpService({
     allowedDirs: config.allowedDirs,
+    includeDefaultDirs: true,
     presetFilePath: config.presetFilePath,
     limits: config.limits,
     planStore: new InMemoryMcpPlanStore({

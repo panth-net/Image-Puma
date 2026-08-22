@@ -23,8 +23,10 @@ Schema 2020-12 dialect. Tool handlers are untouched by it.
 Two deliberate positions:
 
 - **Roots are optional.** `roots/list` is deprecated in the modern revision and
-  unavailable to stateless clients. `--allow-dir` is the primary way to grant
-  access; client roots are still read when a legacy client offers them.
+  unavailable to stateless clients. The server never requests client roots:
+  Cursor on Windows sends drive-letter workspace URIs that fail the MCP
+  `file://` schema and abort the tool. `--allow-dir`, the process cwd, and the
+  user's Pictures/Downloads/Documents/Desktop folders grant access instead.
 - **Tool failures stay `isError` results.** Only protocol-level faults become
   JSON-RPC errors (`-32601` unknown method, `-32602` unknown tool or malformed
   params). A tool that runs and fails reports through `isError` so the model can
