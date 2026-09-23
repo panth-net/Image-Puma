@@ -18,7 +18,7 @@ import {
   getResolvedFormat,
 } from './build-pipeline';
 import { buildSyntheticImageCleanupPlan } from './synthetic-cleaning';
-import { prepareSharpInput } from '../files/prepare-sharp-input';
+import { nativeDecodeRunWarning, prepareSharpInput } from '../files/prepare-sharp-input';
 import { isIconOutputFormat, renderIconContainer } from './icon-containers';
 
 function getPreviewMimeType(format: string): string {
@@ -112,7 +112,7 @@ export async function generatePreview(
     const warnings: string[] = [];
 
     if (preparedInput.usedNativeFallback) {
-      warnings.push('Decoded with macOS ImageIO before compression');
+      warnings.push(nativeDecodeRunWarning());
     }
     if (meta.hasAlpha && resolvedOutputFormat === 'jpeg') {
       warnings.push('Transparency will be lost converting to JPEG');

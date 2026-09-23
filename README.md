@@ -178,4 +178,4 @@ Development setup, checks, and the build process are in [CONTRIBUTING.md](CONTRI
 
 ## Support Matrix
 
-Format and OS behavior is documented in [docs/support-matrix.md](docs/support-matrix.md). HEIC/HEIF gets a macOS-only ImageIO fallback through `sips`; Windows and Linux rely on Sharp/libvips support.
+Format and OS behavior is documented in [docs/support-matrix.md](docs/support-matrix.md). HEIC/HEIF uses Sharp first. macOS can fall back to ImageIO through `sips`. Windows and Linux fall back to the bundled libheif decoder when Sharp cannot decode HEVC.

@@ -11,7 +11,7 @@ Image Puma uses Sharp/libvips first. On macOS only, it can fall back to `/usr/bi
 | TIFF / TIF | Supported | Supported | Supported | Export target: TIFF. |
 | ICO | Supported | Supported | Supported | Export target: multi-resolution Windows ICO with 16, 20, 24, 32, 40, 48, 64, 128, and 256px representations. |
 | ICNS | Supported | Supported | Supported | Export target: multi-resolution macOS ICNS with 16px through 1024px representations. |
-| HEIC / HEIF / HIF | Sharp first, then macOS ImageIO fallback through `sips` | Sharp only | Sharp only | If neither Sharp nor the macOS fallback can decode it, the file is skipped or the run fails with a decode error. `keep-original` exports HEIC-like inputs as JPEG because Image Puma does not write HEIC. |
+| HEIC / HEIF / HIF | Sharp first, then macOS ImageIO fallback through `sips` | Sharp first, then the bundled libheif decoder | Sharp first, then the bundled libheif decoder | Prebuilt Sharp on Windows and Linux can read the HEIF container but cannot decode iPhone HEVC. Image Puma then decodes those files with bundled libheif. If that also fails, the file is skipped or the run fails with a decode error. `keep-original` exports HEIC-like inputs as JPEG because Image Puma does not write HEIC. |
 | BMP / ICO / ICNS / JPEG 2000 / PSD / TGA / JXL / SGI inputs | Sharp first, plus macOS ImageIO fallback for known native extensions | Sharp only | Sharp only | Input availability depends on the bundled Sharp/libvips build and OS fallback support. |
 | GIF / animated inputs | Sharp-dependent | Sharp-dependent | Sharp-dependent | Image Puma treats supported inputs as image sources for static export workflows. |
 
