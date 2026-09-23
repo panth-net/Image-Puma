@@ -21,7 +21,7 @@ import { isBackgroundRemovalEnabled, normalizeBackgroundRemovalSettings } from '
 import { getBatchOutputFormat, normalizeImageFormatName } from '../shared/recipe-helpers';
 import { getResolvedFormat } from '../processing/build-pipeline';
 import { resolveOutputFolder, resolvePlannedOutputPaths } from './export-paths';
-import { prepareSharpInput } from './prepare-sharp-input';
+import { nativeDecodePlanWarning, prepareSharpInput } from './prepare-sharp-input';
 
 function issue(
   level: BatchOutputPlanIssue['level'],
@@ -201,7 +201,7 @@ async function collectMetadataWarnings(file: InputFile, preset: AppPreset): Prom
 
   try {
     if (preparedInput.usedNativeFallback) {
-      issues.push(issue('warning', 'source-native-decode-fallback', 'This source will be decoded with macOS ImageIO before compression.', {
+      issues.push(issue('warning', 'source-native-decode-fallback', nativeDecodePlanWarning(), {
         sourcePath: file.sourcePath,
         section: 'sources',
       }));

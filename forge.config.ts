@@ -35,11 +35,16 @@ const config: ForgeConfig = {
     extraResource: [
       path.join('.', 'node_modules', exiftoolVendorPackage),
       path.join('.', 'build', 'background-removal-runtime'),
+      path.join('.', 'build', 'heif-decoder'),
       path.join('.', 'src', 'main', 'background-removal', 'RMBG-2.0-NOTICE.txt'),
     ],
     asar: {
       unpack: '**/native_modules/sharp*/**/*',
-      unpackDir: '.webpack/main/native_modules/sharp-libvips-darwin-arm64',
+      // Sharp's Windows DLLs must sit beside the .node file. A glob does not
+      // unpack them on Windows, so unpack the whole platform directory.
+      unpackDir: process.platform === 'win32'
+        ? path.join('.webpack', 'main', 'native_modules', 'sharp-win32-x64')
+        : '.webpack/main/native_modules/sharp-libvips-darwin-arm64',
     },
   },
   hooks: {

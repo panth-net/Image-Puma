@@ -7,7 +7,7 @@ import { buildPipeline } from './build-pipeline';
 import { applyOutputMetadataPolicy } from './metadata-cleaning';
 import { buildSyntheticImageCleanupPlan } from './synthetic-cleaning';
 import { ensureNoOverwrite, ensureDir, resolvePlannedOutputPaths } from '../files/export-paths';
-import { prepareSharpInput } from '../files/prepare-sharp-input';
+import { nativeDecodeRunWarning, prepareSharpInput } from '../files/prepare-sharp-input';
 import type { ImageProcessingLimits } from './processing-limits';
 import { normalizeImageProcessingLimits } from './processing-limits';
 import {
@@ -123,7 +123,7 @@ export async function processOneImage(
     let totalOutputSize = 0;
 
     if (preparedInput?.usedNativeFallback) {
-      warnings.push('Decoded with macOS ImageIO before compression.');
+      warnings.push(nativeDecodeRunWarning());
     }
 
     try {

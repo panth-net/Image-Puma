@@ -1,5 +1,7 @@
 import { execFile } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
 import * as fs from 'fs/promises';
+import { createRequire } from 'module';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
@@ -15,6 +17,26 @@ export interface PreparedSharpInput {
   metadata: sharp.Metadata;
   usedNativeFallback: boolean;
   dispose: () => Promise<void>;
+}
+
+interface DecodedHeifImage {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+}
+
+type HeifDecoder = (options: { buffer: Buffer }) => Promise<DecodedHeifImage>;
+
+export function nativeDecodeRunWarning(): string {
+  return process.platform === 'darwin'
+    ? 'Decoded with macOS ImageIO before compression.'
+    : 'Decoded HEIC with the bundled HEIF decoder before compression.';
+}
+
+export function nativeDecodePlanWarning(): string {
+  return process.platform === 'darwin'
+    ? 'This source will be decoded with macOS ImageIO before compression.'
+    : 'This source will be decoded with the bundled HEIF decoder before compression.';
 }
 
 function isNativeMacosFallbackCandidate(filePath: string): boolean {
@@ -104,7 +126,7 @@ export async function prepareSharpInput(
       try {
         await assertPixelsDecode(filePath, options.processingLimits);
       } catch (decodeError) {
-        return decodeWithMacosImageIo(filePath, decodeError, options.processingLimits);
+        return decodeHeifFallback(filePath, decodeError, options.processingLimits);
       }
     }
 
@@ -115,6 +137,91 @@ export async function prepareSharpInput(
       dispose: async () => undefined,
     };
   } catch (metadataError) {
-    return decodeWithMacosImageIo(filePath, metadataError, options.processingLimits);
+    return decodeHeifFallback(filePath, metadataError, options.processingLimits);
+  }
+}
+
+function decodeHeifFallback(
+  filePath: string,
+  originalError: unknown,
+  processingLimits?: ImageProcessingLimits,
+): Promise<PreparedSharpInput> {
+  if (isNativeMacosFallbackCandidate(filePath)) {
+    return decodeWithMacosImageIo(filePath, originalError, processingLimits);
+  }
+  if (isHeifLikeInput(filePath)) {
+    return decodeWithBundledHeif(filePath, originalError, processingLimits);
+  }
+  return Promise.reject(originalError);
+}
+
+function findImagePumaPackageJson(startDir: string): string | null {
+  let dir = startDir;
+  while (true) {
+    const candidate = path.join(dir, 'package.json');
+    if (existsSync(candidate)) {
+      try {
+        const pkg = JSON.parse(readFileSync(candidate, 'utf8')) as { name?: string };
+        if (pkg.name === 'image-puma') return candidate;
+      } catch {
+        // Keep walking if a nearby package.json is unreadable.
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function loadBundledHeifDecoder(): HeifDecoder {
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const packagedEntry = resourcesPath
+    ? path.join(resourcesPath, 'heif-decoder', 'node_modules', 'heic-decode', 'index.js')
+    : '';
+  if (packagedEntry && existsSync(packagedEntry)) {
+    return createRequire(packagedEntry)('heic-decode') as HeifDecoder;
+  }
+
+  const projectPackage = findImagePumaPackageJson(__dirname);
+  if (!projectPackage) {
+    throw new Error('Could not locate the bundled HEIF decoder.');
+  }
+  return createRequire(projectPackage)('heic-decode') as HeifDecoder;
+}
+
+async function decodeWithBundledHeif(
+  filePath: string,
+  originalError: unknown,
+  processingLimits?: ImageProcessingLimits,
+): Promise<PreparedSharpInput> {
+  const limits = normalizeImageProcessingLimits(processingLimits);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'image-puma-heif-'));
+  const decodedPath = path.join(tempDir, 'source.png');
+
+  try {
+    const decodeHeif = loadBundledHeifDecoder();
+    const decoded = await decodeHeif({ buffer: await fs.readFile(filePath) });
+    const pixelCount = decoded.width * decoded.height * 4;
+    if (!decoded.width || !decoded.height || decoded.data.byteLength < pixelCount) {
+      throw new Error('HEIF decoder returned an incomplete image.');
+    }
+    const pixels = Buffer.from(decoded.data.buffer, decoded.data.byteOffset, pixelCount);
+    await sharp(pixels, {
+      raw: { width: decoded.width, height: decoded.height, channels: 4 },
+      limitInputPixels: limits.limitInputPixels,
+    }).png().toFile(decodedPath);
+
+    const metadata = await sharp(decodedPath, { limitInputPixels: limits.limitInputPixels }).metadata();
+    return {
+      path: decodedPath,
+      metadata,
+      usedNativeFallback: true,
+      dispose: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
+  } catch (fallbackError) {
+    await fs.rm(tempDir, { recursive: true, force: true });
+    throw new Error(`Could not decode source image. Sharp reported: ${errorMessage(originalError)}. HEIF decoder reported: ${errorMessage(fallbackError)}`);
   }
 }
